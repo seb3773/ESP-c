@@ -13,3 +13,5 @@ __pycache__/
 
 # Work directory (scratch & temporary files, not for GitHub)
 _work*
+dist/
+*.tar.gz
