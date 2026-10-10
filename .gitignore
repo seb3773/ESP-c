@@ -1,0 +1,15 @@
+# Build artifacts
+esp
+unesp
+selftest
+tools/test_c_engine
+*.o
+src/*.o
+
+# Python cache & temporary files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Work directory (scratch & temporary files, not for GitHub)
+_work*
