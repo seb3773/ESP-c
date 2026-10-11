@@ -95,7 +95,7 @@ Prefix-repeat (`/J` disables it): if file N shares a leading prefix of length R 
 
 ## Reverse-Engineered DOS ESP v1.92 Architecture
 
-The clean-room C implementation achieves 100.000% bit-exact payload matching against the historical DOS `ESP.EXE v1.92` archiver across the corpus.
+The C implementation achieves 100% bit-exact payload matching against the historical DOS `ESP.EXE v1.92` archiver across the corpus.
 
 ### 1. Match Finder & Sliding Dictionary (Method 0 - Best)
 - **Hash Table**: 4,096 entries (`head[4096]`), updating as `bx = (h << 4); h = ((bx >> 8) & 0x0F) << 8 | ((bx & 0xFF) + byte)`.
