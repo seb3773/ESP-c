@@ -140,5 +140,7 @@ uint32_t esp_unix_to_dos_datetime(uint32_t unix_ts);
 void esp_dos_datetime_to_parts(uint32_t dt, int *year, int *mon, int *day,
 			       int *hour, int *min, int *sec);
 
+int esp_is_safe_relpath(const char *path);
+
 #endif
 

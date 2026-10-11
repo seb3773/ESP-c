@@ -859,19 +859,30 @@ static int run_unpack(int cmd, const char *arcpath, const char *dest)
 						d_path[k] = (char)(d_path[k] + 32);
 				}
 				for (k = 0; d_name[k]; k++) {
+					if (d_name[k] == '\\') d_name[k] = '/';
 					if (opt_unix && d_name[k] >= 'A' && d_name[k] <= 'Z')
 						d_name[k] = (char)(d_name[k] + 32);
 				}
+
+				char relpath[1024];
+				if (d_path[0])
+					snprintf(relpath, sizeof(relpath), "%s/%s", d_path, d_name);
+				else
+					snprintf(relpath, sizeof(relpath), "%s", d_name);
+
+				if (!esp_is_safe_relpath(relpath)) {
+					fprintf(stderr, "Security warning: skipping unsafe path traversal: %s\n", relpath);
+					continue;
+				}
+
 				if (dest[0]) {
 					snprintf(path, sizeof(path), "%s", dest);
 					if (path[strlen(path) - 1] != '/')
 						strncat(path, "/", sizeof(path) - strlen(path) - 1);
+					strncat(path, relpath, sizeof(path) - strlen(path) - 1);
+				} else {
+					snprintf(path, sizeof(path), "%s", relpath);
 				}
-				if (d_path[0]) {
-					strncat(path, d_path, sizeof(path) - strlen(path) - 1);
-					strncat(path, "/", sizeof(path) - strlen(path) - 1);
-				}
-				strncat(path, d_name, sizeof(path) - strlen(path) - 1);
 				mkdir_p(path);
 			}
 			continue;
@@ -889,21 +900,43 @@ static int run_unpack(int cmd, const char *arcpath, const char *dest)
 				f_path[k] = (char)(f_path[k] + 32);
 		}
 		for (k = 0; f_name[k]; k++) {
+			if (f_name[k] == '\\') f_name[k] = '/';
 			if (opt_unix && f_name[k] >= 'A' && f_name[k] <= 'Z')
 				f_name[k] = (char)(f_name[k] + 32);
+		}
+
+		char relpath[1024];
+		if (cmd == 'x' && f_path[0])
+			snprintf(relpath, sizeof(relpath), "%s/%s", f_path, f_name);
+		else
+			snprintf(relpath, sizeof(relpath), "%s", f_name);
+
+		if (!esp_is_safe_relpath(relpath)) {
+			fprintf(stderr, "Security warning: skipping unsafe path traversal: %s\n", relpath);
+			continue;
 		}
 
 		if (dest[0]) {
 			snprintf(path, sizeof(path), "%s", dest);
 			if (path[strlen(path) - 1] != '/')
 				strncat(path, "/", sizeof(path) - strlen(path) - 1);
+			strncat(path, relpath, sizeof(path) - strlen(path) - 1);
+		} else {
+			snprintf(path, sizeof(path), "%s", relpath);
 		}
+
 		if (cmd == 'x' && f_path[0]) {
-			strncat(path, f_path, sizeof(path) - strlen(path) - 1);
-			strncat(path, "/", sizeof(path) - strlen(path) - 1);
-			mkdir_p(path);
+			char dir_part[1024];
+			if (dest[0]) {
+				snprintf(dir_part, sizeof(dir_part), "%s", dest);
+				if (dir_part[strlen(dir_part) - 1] != '/')
+					strncat(dir_part, "/", sizeof(dir_part) - strlen(dir_part) - 1);
+				strncat(dir_part, f_path, sizeof(dir_part) - strlen(dir_part) - 1);
+			} else {
+				snprintf(dir_part, sizeof(dir_part), "%s", f_path);
+			}
+			mkdir_p(dir_part);
 		}
-		strncat(path, f_name, sizeof(path) - strlen(path) - 1);
 		if (!opt_always_yes) {
 			FILE *ex = fopen(path, "rb");
 			if (ex) {

@@ -319,6 +319,100 @@ int main(void)
 		esp_buf_free(&arc);
 	}
 
+	/* Path Traversal & Zip-Slip Protection tests */
+	expect(esp_is_safe_relpath("hello.txt") == 1, "path-safe-simple");
+	expect(esp_is_safe_relpath("nested/dir1/hello.txt") == 1, "path-safe-nested");
+	expect(esp_is_safe_relpath("nested\\dir1\\hello.txt") == 1, "path-safe-dos-backslash");
+	expect(esp_is_safe_relpath("dir/sub/../file.txt") == 1, "path-safe-internal-dotdot");
+	expect(esp_is_safe_relpath("nested/dir1/") == 1, "path-safe-dir");
+	expect(esp_is_safe_relpath("../evil.txt") == 0, "path-unsafe-dotdot-leading");
+	expect(esp_is_safe_relpath("..\\evil.txt") == 0, "path-unsafe-dos-dotdot-leading");
+	expect(esp_is_safe_relpath("dir/../../evil.txt") == 0, "path-unsafe-dotdot-depth");
+	expect(esp_is_safe_relpath("dir\\..\\..\\evil.txt") == 0, "path-unsafe-dos-dotdot-depth");
+	expect(esp_is_safe_relpath("/etc/passwd") == 0, "path-unsafe-absolute-slash");
+	expect(esp_is_safe_relpath("\\Windows\\System32") == 0, "path-unsafe-absolute-backslash");
+	expect(esp_is_safe_relpath("C:\\boot.ini") == 0, "path-unsafe-drive-colon");
+	expect(esp_is_safe_relpath("c:evil.bat") == 0, "path-unsafe-drive-relative");
+	expect(esp_is_safe_relpath(".") == 0, "path-unsafe-dot");
+	expect(esp_is_safe_relpath("..") == 0, "path-unsafe-dotdot");
+	expect(esp_is_safe_relpath("dir/..") == 0, "path-unsafe-dir-dotdot");
+	expect(esp_is_safe_relpath(NULL) == 0, "path-unsafe-null");
+	expect(esp_is_safe_relpath("") == 0, "path-unsafe-empty");
+
+	/* Archive-level Path Traversal & Zip-Slip Protection tests */
+	{
+		EspInputFile trav_files[6];
+		static const uint8_t good_data[] = "SAFE_CONTENT";
+		static const uint8_t evil1_data[] = "EVIL1_CONTENT";
+		static const uint8_t evil2_data[] = "EVIL2_CONTENT";
+		memset(trav_files, 0, sizeof(trav_files));
+
+		/* Directory entry 0: ".." */
+		trav_files[0].is_dir = 1;
+		strcpy(trav_files[0].stored_name, "..");
+
+		/* Directory entry 1: "../.." */
+		trav_files[1].is_dir = 1;
+		strcpy(trav_files[1].stored_path, "..");
+		strcpy(trav_files[1].stored_name, "..");
+
+		/* Directory entry 2: "C:" */
+		trav_files[2].is_dir = 1;
+		strcpy(trav_files[2].stored_name, "C:");
+
+		/* File entry 3: Safe file */
+		strcpy(trav_files[3].stored_name, "SAFE.TXT");
+		trav_files[3].attrib = 0x20;
+		trav_files[3].size = sizeof(good_data) - 1;
+		trav_files[3].data = (uint8_t *)good_data;
+
+		/* File entry 4: Malicious traversal file */
+		strcpy(trav_files[4].stored_name, "EVIL1.TXT");
+		strcpy(trav_files[4].stored_path, "../..");
+		trav_files[4].attrib = 0x20;
+		trav_files[4].size = sizeof(evil1_data) - 1;
+		trav_files[4].data = (uint8_t *)evil1_data;
+
+		/* File entry 5: DOS drive path file */
+		strcpy(trav_files[5].stored_name, "BOOT.INI");
+		strcpy(trav_files[5].stored_path, "C:");
+		trav_files[5].attrib = 0x20;
+		trav_files[5].size = sizeof(evil2_data) - 1;
+		trav_files[5].data = (uint8_t *)evil2_data;
+
+		expect(esp_create_archive(trav_files, 6, 0, 0, ESP_MM_NONE, ESP_ME_NEW, NULL, 0, NULL, 0, &arc) == ESP_OK,
+		       "create-traversal-arc");
+		esp_write_file("/tmp/selftest_traversal.esp", arc.data, arc.len);
+
+		expect(esp_open_archive(arc.data, arc.len, &opened) == ESP_OK, "open-traversal-arc");
+		expect(opened.n_entries == 6, "traversal-arc-entries-6");
+
+		/* Verify dir 0 unsafe */
+		expect(esp_is_safe_relpath(opened.entries[0].name) == 0, "traversal-dir0-unsafe");
+		/* Verify dir 1 unsafe */
+		char d1[512];
+		snprintf(d1, sizeof(d1), "%s/%s", opened.entries[1].path, opened.entries[1].name);
+		expect(esp_is_safe_relpath(d1) == 0, "traversal-dir1-unsafe");
+		/* Verify dir 2 unsafe */
+		expect(esp_is_safe_relpath(opened.entries[2].name) == 0, "traversal-dir2-unsafe");
+
+		/* Verify entry 3 safe */
+		expect(esp_is_safe_relpath(opened.entries[3].name) == 1, "traversal-entry3-safe");
+
+		/* Verify entry 4 unsafe */
+		char p4[512];
+		snprintf(p4, sizeof(p4), "%s/%s", opened.entries[4].path, opened.entries[4].name);
+		expect(esp_is_safe_relpath(p4) == 0, "traversal-entry4-unsafe");
+
+		/* Verify entry 5 unsafe */
+		char p5[512];
+		snprintf(p5, sizeof(p5), "%s/%s", opened.entries[5].path, opened.entries[5].name);
+		expect(esp_is_safe_relpath(p5) == 0, "traversal-entry5-unsafe");
+
+		esp_close_archive(&opened);
+		esp_buf_free(&arc);
+	}
+
 	if (fails) {
 		printf("%d selftests failed\n", fails);
 		return 1;

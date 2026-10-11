@@ -135,7 +135,13 @@ Through deep reverse-engineering of `tools/esp_cs.bin`, the entire compression p
 - **Terminal-Safe Presentation**:
   - `/C1` text comments are printed directly to stdout.
   - `/C2` ANSI binary and `/C4..6` VGA graphics PIC comments are decoded and summarized via a clean informative banner (`[Archive Comment: ...]`), preventing binary garbage from polluting modern terminal emulators.
-  - Switch `s` (e.g. `unesp ls arc.esp` or `-s`) suppresses comment display.
+### 8. Path Traversal & Zip-Slip Protection (`esp_is_safe_relpath()`)
+Both `esp` and `unesp` strictly validate all extraction paths through `esp_is_safe_relpath()` to protect against malicious archives attempting path traversal or Zip-Slip vulnerabilities:
+- **Depth tracking**: Continuously tracks directory nesting depth. Any attempt to ascend above the destination root via `../` or `..\` is intercepted and safely skipped with a warning (`Security warning: skipping unsafe path traversal: <path>`).
+- **Absolute & drive path rejection**: Rejects leading absolute slashes (`/`, `\`) and DOS drive identifiers (`C:`).
+- **DOS separator normalization**: Automatically normalizes historical DOS backslashes (`DIR\SUBDIR\FILE.TXT`) into forward slashes `/` on POSIX systems, ensuring safe, seamless directory hierarchy recreation.
+- **Dual Validation**: Validates both directory creation entries and file extractions across both full extraction (`x`) and flat extraction (`e`).
+- **Stream-Safe Diagnostics**: Security warnings are routed to `stderr`, preserving clean Unix piping when operating in bare output mode (`-1` / `--bare`).
 
 ---
 
@@ -154,6 +160,7 @@ Through deep reverse-engineering of `tools/esp_cs.bin`, the entire compression p
 | Password Encryption (`/G`, `/ME1`, `/ME2`) | **100% Bit-Exact** | Decodes DOS `PASS1`/`PASS2` & 100.000% bit-exact recreation |
 | Multi-Volume Splitting (`/V`, `/VV`) | **100% Bit-Exact** | Decodes DOS 12-volume archive & 100.000% bit-exact recreation |
 | Archive Comments (`/Cn=file`, `s`) | **100% Bit-Exact & Safe** | Decodes DOS `CMT_M0`, `CMT_M4`, `CMT_C2`, `CMT_C5` + encr/suppr |
+| Path Traversal / Zip-Slip Defense | **100% Secure** | Depth tracking, absolute/drive rejection, selftests & suite 11 |
 
 Run the full verification suite anytime with:
 ```bash
@@ -161,4 +168,5 @@ python3 tools/verify_bit_exact.py
 ```
 
 Detailed technical specifications of the file format and algorithms can be found in [FORMAT.md](FORMAT.md).
+
 

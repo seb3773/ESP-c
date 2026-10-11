@@ -308,3 +308,49 @@ void esp_format_volume_path(const char *base_path, int vol_num, char *out_path, 
 	snprintf(out_path, out_sz, "%s.%c%02d", prefix, base_letter, num_part);
 }
 
+int esp_is_safe_relpath(const char *path)
+{
+	if (!path || !path[0])
+		return 0;
+
+	/* Reject absolute paths: leading slash or backslash */
+	if (path[0] == '/' || path[0] == '\\')
+		return 0;
+
+	/* Reject DOS drive identifiers: e.g. "C:", "d:" */
+	if (((path[0] >= 'a' && path[0] <= 'z') || (path[0] >= 'A' && path[0] <= 'Z')) && path[1] == ':')
+		return 0;
+
+	int depth = 0;
+	const char *p = path;
+
+	while (*p) {
+		/* Skip consecutive slashes/backslashes */
+		while (*p == '/' || *p == '\\')
+			p++;
+		if (!*p)
+			break;
+
+		/* Find the end of this component */
+		const char *start = p;
+		while (*p && *p != '/' && *p != '\\')
+			p++;
+		size_t len = (size_t)(p - start);
+
+		if (len == 1 && start[0] == '.') {
+			/* Current directory - depth unchanged */
+			continue;
+		} else if (len == 2 && start[0] == '.' && start[1] == '.') {
+			/* Parent directory - would ascend */
+			if (depth <= 0)
+				return 0; /* Unsafe: ascends above destination root */
+			depth--;
+		} else {
+			/* Normal directory or file component */
+			depth++;
+		}
+	}
+
+	return depth > 0;
+}
+
